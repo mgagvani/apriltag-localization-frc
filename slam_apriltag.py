@@ -1,5 +1,6 @@
 """
-Draw in the air: cover the OAK-D color camera to activate the ink.
+AprilTag SLAM using DepthAI and SpectacularAI.
+Includes 3D visualization using matplotlib and live camera preview. 
 Requirements: pip install matplotlib opencv-python
 """
 import depthai
@@ -13,10 +14,10 @@ SHOW_CAM = True
 if SHOW_CAM:
     import cv2
 
-def make_pipelines():
+def make_pipelines(aprilTagPath="apriltag_configs/test_apriltags.json"):
     # add apritag
     config = spectacularAI.depthai.Configuration()
-    config.aprilTagPath = "C:\\Users\\mgagv\\Documents\\FRC\\sdk-examples\\python\\oak\\test_apriltags.json"
+    config.aprilTagPath = aprilTagPath
 
     pipeline = depthai.Pipeline()
     vio_pipeline = spectacularAI.depthai.Pipeline(pipeline, config)
@@ -57,8 +58,7 @@ class MatplotlibVisualization:
         from mpl_toolkits.mplot3d import Axes3D
         from matplotlib.animation import FuncAnimation
 
-        self.ink_active = False
-        self.prev_ink_active = False
+        self.active = True
 
         fig = plt.figure()
         ax = Axes3D(fig, auto_add_to_figure=False)
@@ -125,7 +125,6 @@ class MatplotlibVisualization:
     def update_vio(self, vio_out):
         if self.should_close: return False
         view_mat = vio_out.pose.asMatrix()
-        # print(f"[DEBUG] view_mat: {view_mat}")
 
         for c in 'xyz': self.vio_cam_data[c] = []
         for vertex in self.cam_wire:
@@ -135,26 +134,15 @@ class MatplotlibVisualization:
                 self.vio_cam_data[c].append(p_world[i])
 
         for c in 'xyz':
-            if self.ink_active:
-                self.vio_data[c].append(getattr(vio_out.pose.position, c))
-            elif not self.prev_ink_active:
-                # NaN can be used to break lines in matplotlib
-                self.vio_data[c].append(np.nan)
+            self.vio_data[c].append(getattr(vio_out.pose.position, c))
 
         # debug print XYZ
-        # print("GOT VIO")
-        # print(dir(vio_out.pose))
         self.print_xyz_rot(vio_out.pose)
-
-        self.prev_ink_active = self.ink_active
 
         return True
 
-    def set_ink_active(self, active):
-        self.ink_active = active
-
     def clear(self):
-        self.ink_active = False
+        self.active = False
         for c in 'xyz': del self.vio_data[c][:]
 
     def start_in_parallel_with(self, parallel_thing):
@@ -180,7 +168,6 @@ if __name__ == '__main__':
                     if not visu_3d.update_vio(vio_out): break
                 elif rgbQueue.has():
                     rgbFrame = rgbQueue.get()
-                    visu_3d.set_ink_active(True) # always active
 
                     if SHOW_CAM:
                         cv2.imshow("rgb", rgbFrame.getCvFrame())
