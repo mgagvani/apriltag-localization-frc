@@ -10,7 +10,7 @@ import spectacularAI
 import threading
 import numpy as np
 
-from quaternion2theta import quaternion_to_theta
+from quaternion2theta import *
 
 SHOW_CAM = True
 if SHOW_CAM:
@@ -100,9 +100,14 @@ if __name__ == '__main__':
                 if vio_session.hasOutput(): # if we have a new vio output
                     vio_out = vio_session.getOutput() # get it
 
-                    apriltag_slam.print_xyz_rot(vio_out.pose, ending="\r")
-                    # print(np.rad2deg(quaternion_to_theta(apriltag_slam.get_xyz_quat(vio_out.pose)[1])), end="\r")
-
+                    # apriltag_slam.print_xyz_rot(vio_out.pose, ending="\r")
+                    # matrix
+                    matrix = vio_out.pose.asMatrix()
+                    roll, pitch, yaw = homogenous_to_euler(matrix)
+                    roll_deg, pitch_deg, yaw_deg = [np.rad2deg(roll), np.rad2deg(pitch), np.rad2deg(yaw)]
+                    print(f"roll: {roll_deg}, pitch: {pitch_deg}, yaw: {yaw_deg}", end="\r")
+                    
+                    
                 elif rgbQueue.has(): # if we have a new rgb frame
                     rgbFrame = rgbQueue.get()
 
