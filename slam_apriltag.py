@@ -10,6 +10,8 @@ import spectacularAI
 import threading
 import numpy as np
 
+from quaternion2theta import quaternion_to_theta
+
 SHOW_CAM = True
 if SHOW_CAM:
     import cv2
@@ -44,25 +46,26 @@ def make_pipelines(aprilTagPath="apriltag_configs/test_apriltags.json"):
 
 class ApriltagLocalizer:
     def __init__(self):
-        self.active = True
-
         empty_xyz = lambda: { c: [] for c in 'xyz' }
-
         vio_data = empty_xyz()
-
-        def on_close(*args):
-            self.should_close = True
-
         self.vio_data = vio_data
 
-    def print_xyz_rot(self, pose: spectacularAI.Pose, ending="\n"):
+    def get_xyz_quat(self, pose: spectacularAI.Pose):
         position = pose.position
-        x, y, z = position.x, position.y, position.z
+        xyz = position.x, position.y, position.z
 
         rotation = pose.orientation
-        rw, rx, ry, rz = rotation.w, rotation.x, rotation.y, rotation.z
+        quat = rotation.w, rotation.x, rotation.y, rotation.z
 
-        print(f"({x}, {y}, {z}), ({rw}, {rx}, {ry}, {rz})", end=ending)
+        return xyz, quat
+    
+    def print_xyz_rot(self, pose: spectacularAI.Pose, ending="\n", digits=4):
+        xyz, quat = self.get_xyz_quat(pose)
+
+        xyz = tuple(round(x, digits) for x in xyz)
+        quat = tuple(round(q, digits) for q in quat)
+
+        print(f"xyz: {xyz}, quat: {quat}", end=ending)
     
     def print_vio(self, vio_out):
         '''
@@ -83,7 +86,7 @@ if __name__ == '__main__':
     with depthai.Device(pipeline) as device, \
         vio_pipeline.startSession(device) as vio_session:
 
-        visu_3d = ApriltagLocalizer()
+        apriltag_slam = ApriltagLocalizer()
 
         def main_loop():
             rgbQueue = device.getOutputQueue(name="rgb", maxSize=4, blocking=False)
@@ -96,7 +99,10 @@ if __name__ == '__main__':
                 ### VIO ###
                 if vio_session.hasOutput(): # if we have a new vio output
                     vio_out = vio_session.getOutput() # get it
-                    visu_3d.print_xyz_rot(vio_out.pose, ending="\r")
+
+                    apriltag_slam.print_xyz_rot(vio_out.pose, ending="\r")
+                    # print(np.rad2deg(quaternion_to_theta(apriltag_slam.get_xyz_quat(vio_out.pose)[1])), end="\r")
+
                 elif rgbQueue.has(): # if we have a new rgb frame
                     rgbFrame = rgbQueue.get()
 
@@ -118,4 +124,4 @@ if __name__ == '__main__':
                     timing_info.clear()
 
 
-        visu_3d.start_in_parallel_with(main_loop)
+        apriltag_slam.start_in_parallel_with(main_loop)
