@@ -7,6 +7,7 @@
 
 ## Notes
 * I'm not sure if the `quaternion_to_theta()` and `quaternion_to_theta_xyz_planes()` functions are actually correct.
+* Converting the homogenous matrix's rotation matrix to Euler angles gives you yaw. This is definetly correct. 
 
 ## Testing
 * The VIO only works if there is an AprilTag present when the program starts running.
@@ -14,6 +15,7 @@
   - Moving right increases X
   - Since the tag is at the origin, Y is negative when you're looking at it and moving farther from the tag makes Y more negative
   - Moving up increases Z
+* Yaw from Euler angles is the angle we will send over NetworkTables
 
 ## Goals:
 - [x] Use Spectacular AI SDK to get pose of camera relative to AprilTag(s)
