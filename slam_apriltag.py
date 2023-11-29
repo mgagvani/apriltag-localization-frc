@@ -1,20 +1,22 @@
 """
 AprilTag SLAM using DepthAI and SpectacularAI.
-Includes 3D visualization using matplotlib and live camera preview. 
-Requirements: pip install matplotlib opencv-python
+Includes live camera preview (can disable).
+Requirements: pip install opencv-python
 """
 import depthai
 import time
-import matplotlib.pyplot as plt
 import spectacularAI
 import threading
 import numpy as np
+import logging
 
 from utils import *
 
 SHOW_CAM = True
 if SHOW_CAM:
     import cv2
+
+PRINT_LOGS = True
 
 def make_pipelines(aprilTagPath="apriltag_configs/test_apriltags.json"):
     # add apritag
@@ -24,7 +26,7 @@ def make_pipelines(aprilTagPath="apriltag_configs/test_apriltags.json"):
     pipeline = depthai.Pipeline()
     vio_pipeline = spectacularAI.depthai.Pipeline(pipeline, config)
 
-    RGB_OUTPUT_WIDTH = 200 # very small on purpose
+    RGB_OUTPUT_WIDTH = 300 # very small on purpose
     REF_ASPECT = 1920 / 1080.0
     w = RGB_OUTPUT_WIDTH
     h = int(round(w / REF_ASPECT))
@@ -66,22 +68,16 @@ class ApriltagLocalizer:
         quat = tuple(round(q, digits) for q in quat)
 
         print(f"xyz: {xyz}, quat: {quat}", end=ending)
-    
-    def print_vio(self, vio_out):
-        '''
-        - don't use (kept it for reference of `asMatrix())`
-        '''
-        view_mat = vio_out.pose.asMatrix() # 4x4 matrix (dont need this)
-        return DeprecationWarning
 
     def start_in_parallel_with(self, parallel_thing):
         thread = threading.Thread(target = parallel_thing)
         thread.start()
-        plt.show()
         thread.join()
 
 if __name__ == '__main__':
     pipeline, vio_pipeline = make_pipelines()
+
+    cLogger = CustomLogger(debug_to_stdout=PRINT_LOGS)
 
     with depthai.Device(pipeline) as device, \
         vio_pipeline.startSession(device) as vio_session:
@@ -105,8 +101,8 @@ if __name__ == '__main__':
                     matrix = vio_out.pose.asMatrix()
                     roll, pitch, yaw = homogenous_to_euler(matrix)
                     roll_deg, pitch_deg, yaw_deg = [np.rad2deg(roll), np.rad2deg(pitch), np.rad2deg(yaw)]
-                    print(f"roll: {roll_deg}, pitch: {pitch_deg}, yaw: {yaw_deg}", end="\r")
-                    
+                    # print(f"roll: {roll_deg}, pitch: {pitch_deg}, yaw: {yaw_deg}", end="\r")
+                    cLogger.log_debug(f"Yaw: {yaw_deg}")
                     
                 elif rgbQueue.has(): # if we have a new rgb frame
                     rgbFrame = rgbQueue.get()
@@ -125,7 +121,8 @@ if __name__ == '__main__':
                 timing_info.append(dt)
                 counter += 1
                 if counter % 1000 == 0:
-                    print(f"Average speed (last 1000): {1/np.mean(timing_info)} Hz \n")
+                    # print(f"Average speed (last 1000): {1/np.mean(timing_info)} Hz \n")
+                    cLogger.log_info(f"Average speed (last 1000): {1/np.mean(timing_info)} Hz \n")
                     timing_info.clear()
 
 

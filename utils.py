@@ -4,6 +4,44 @@ Pose2D objects in WPILib use a 2D theta value.
 But SpectacularAI uses a quaternion (w, x, y, z) for its pose.
 """
 import numpy as np
+import logging
+class CustomLogger:
+    def __init__(self, log_file='logs/oakd.log', debug_to_stdout=True):
+        # Configure the logging
+        logging.basicConfig(level=logging.DEBUG,
+                            format='%(asctime)s.%(msecs)03d [%(levelname)s] %(message)s',
+                            datefmt='%Y-%m-%d %H:%M:%S')
+
+        # Create a file handler for INFO logs
+        info_handler = logging.FileHandler(log_file)
+        info_handler.setLevel(logging.INFO)
+        info_handler.setFormatter(logging.Formatter('%(asctime)s.%(msecs)03d [%(levelname)s] %(message)s',
+                                                    datefmt='%Y-%m-%d %H:%M:%S'))
+
+        # Add the INFO handler to the logger
+        self.logger = logging.getLogger('')
+        self.logger.addHandler(info_handler)
+
+        # Set whether DEBUG logs should go to stdout
+        debug_handler = logging.StreamHandler() if debug_to_stdout else logging.NullHandler()
+        debug_handler.setLevel(logging.DEBUG)
+        debug_handler.setFormatter(logging.Formatter('%(asctime)s.%(msecs)03d [%(levelname)s] %(message)s',
+                                                      datefmt='%Y-%m-%d %H:%M:%S'))
+
+        # Add the DEBUG handler to the logger
+        self.logger.addHandler(debug_handler)
+
+    def log_debug(self, message):
+        '''
+        Log a debug message (only if debug_to_stdout is True).
+        '''
+        self.logger.debug(message)
+
+    def log_info(self, message):
+        '''
+        Log an info message (goes to log file only)
+        '''
+        self.logger.info(message)
 
 def quaternion_to_theta(quaternion):
     """
