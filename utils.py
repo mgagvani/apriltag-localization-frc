@@ -13,7 +13,7 @@ class CustomLogger:
                             datefmt='%Y-%m-%d %H:%M:%S')
 
         # Create a file handler for INFO logs
-        info_handler = logging.FileHandler(log_file)
+        info_handler = logging.FileHandler(log_file, mode='a') # append to the log file
         info_handler.setLevel(logging.INFO)
         info_handler.setFormatter(logging.Formatter('%(asctime)s.%(msecs)03d [%(levelname)s] %(message)s',
                                                     datefmt='%Y-%m-%d %H:%M:%S'))

@@ -74,6 +74,13 @@ class ApriltagLocalizer:
         thread.start()
         thread.join()
 
+    @staticmethod
+    def fudge_factor(x, y, yaw):
+        '''
+        Manual correction for when the camera is angled
+        '''
+        return x, (y - 0.04 * np.sin(yaw)), yaw
+
 if __name__ == '__main__':
     pipeline, vio_pipeline = make_pipelines()
 
@@ -90,30 +97,44 @@ if __name__ == '__main__':
             timing_info = []
             counter = 0
 
+            # will need this for NetworkTables to communicate if we are activated
+            activated = False # upon first vio output, set to True
+            active = False # if we were activated last loop, set to True
+
             while True:
                 t1 = time.perf_counter()
                 ### VIO ###
                 if vio_session.hasOutput(): # if we have a new vio output
                     vio_out = vio_session.getOutput() # get it
+                    activated = True # we have a vio output, so we are activated
+                    active = True # we were activated last loop
 
-                    # apriltag_slam.print_xyz_rot(vio_out.pose, ending="\r")
                     # matrix
                     matrix = vio_out.pose.asMatrix()
                     roll, pitch, yaw = homogenous_to_euler(matrix)
+                    x, y, yaw = apriltag_slam.fudge_factor(vio_out.pose.position.x, vio_out.pose.position.y, yaw)
                     roll_deg, pitch_deg, yaw_deg = [np.rad2deg(roll), np.rad2deg(pitch), np.rad2deg(yaw)]
-                    # print(f"roll: {roll_deg}, pitch: {pitch_deg}, yaw: {yaw_deg}", end="\r")
-                    cLogger.log_debug(f"Yaw: {yaw_deg}")
+                    if counter % 2 == 0:
+                        cLogger.log_debug(f"(x, y, yaw (deg)): {(x, y, yaw_deg)}")
                     
                 elif rgbQueue.has(): # if we have a new rgb frame
                     rgbFrame = rgbQueue.get()
 
                     if SHOW_CAM: # debug viewer (so we know if apriltag in frame)
-                        cv2.imshow("rgb", rgbFrame.getCvFrame())
+                        cvFrame = rgbFrame.getCvFrame()
+                        if active and activated:
+                            cv2.putText(cvFrame, "Active", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                        elif not active and activated:
+                            cv2.putText(cvFrame, "No VIO", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+                        elif not activated and not active:
+                            cv2.putText(cvFrame, "Not Active", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
+                        cv2.imshow("rgb", cvFrame)
 
                         cv_key = cv2.waitKey(1)
                         if cv_key == ord('q'):
                             break
                 else: # if we have neither a new vio output nor a new rgb frame
+                    active = False
                     time.sleep(0.005) # need to sleep to not race condition
 
                 ### VIO ###
@@ -121,7 +142,6 @@ if __name__ == '__main__':
                 timing_info.append(dt)
                 counter += 1
                 if counter % 1000 == 0:
-                    # print(f"Average speed (last 1000): {1/np.mean(timing_info)} Hz \n")
                     cLogger.log_info(f"Average speed (last 1000): {1/np.mean(timing_info)} Hz \n")
                     timing_info.clear()
 

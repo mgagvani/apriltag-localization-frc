@@ -19,6 +19,7 @@
   - Moving up increases Z
 * Yaw from Euler angles is the angle we will send over NetworkTables
   - This is because the angles are X, Y, Z --> Roll, Pitch, Yaw, and we are rotating about the Z-axis
+* The camera must be rotated about its center or its position readings become slightly inaccurate
 
 ## Goals:
 - [x] Use Spectacular AI SDK to get pose of camera relative to AprilTag(s)
@@ -27,5 +28,6 @@
   - [x] One AprilTag
   - [ ] Multiple AprilTags
 - [x] Convert data into format usable by FRC's Pose2d object (x, y, theta) from quaternions
+- [x] Use logging instead of prints
 - [ ] Stream data over NetworkTables
 - [ ] Use streamed data in place of Pigeon/NavX/Dead Reckoning on the robot
