@@ -9,16 +9,17 @@ import spectacularAI
 import threading
 import numpy as np
 import logging
+from networktables import NetworkTables
 
 from utils import *
 
-SHOW_CAM = True
+SHOW_CAM = False
 if SHOW_CAM:
     import cv2
 
 PRINT_LOGS = True
 
-def make_pipelines(aprilTagPath="apriltag_configs/test_apriltags.json"):
+def make_pipelines(aprilTagPath="apriltag_configs/prototype_apriltags2.json"):
     # add apritag
     config = spectacularAI.depthai.Configuration()
     config.aprilTagPath = aprilTagPath
@@ -86,6 +87,9 @@ if __name__ == '__main__':
 
     cLogger = CustomLogger(debug_to_stdout=PRINT_LOGS)
 
+    NetworkTables.initialize(server='10.85.92.1')
+    sd = NetworkTables.getTable('SmartDashboard')
+
     with depthai.Device(pipeline) as device, \
         vio_pipeline.startSession(device) as vio_session:
 
@@ -113,9 +117,12 @@ if __name__ == '__main__':
                     matrix = vio_out.pose.asMatrix()
                     roll, pitch, yaw = homogenous_to_euler(matrix)
                     x, y, yaw = apriltag_slam.fudge_factor(vio_out.pose.position.x, vio_out.pose.position.y, yaw)
+                    sd.putNumber('vision_x', x)
+                    sd.putNumber('vision_y', y)
+                    sd.putNumber('vision_yaw', yaw)
                     roll_deg, pitch_deg, yaw_deg = [np.rad2deg(roll), np.rad2deg(pitch), np.rad2deg(yaw)]
                     if counter % 2 == 0:
-                        cLogger.log_debug(f"(x, y, yaw (deg)): {(x, y, yaw_deg)}")
+                        cLogger.log_debug(f"(x, y, z, yaw (deg)): {(x, y, vio_out.pose.position.z, yaw_deg)}")
                     
                 elif rgbQueue.has(): # if we have a new rgb frame
                     rgbFrame = rgbQueue.get()
