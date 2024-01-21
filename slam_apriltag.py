@@ -19,15 +19,18 @@ if SHOW_CAM:
 
 PRINT_LOGS = True
 
-def make_pipelines(aprilTagPath="apriltag_configs/prototype_apriltags2.json"):
+def make_pipelines(aprilTagPath="apriltag_configs/crescendo_apriltags.json"):
     # add apritag
     config = spectacularAI.depthai.Configuration()
     config.aprilTagPath = aprilTagPath
+    config.useFeatureTracker = True
+    config.useVioAutoExposure = True
+    config.inputResolution = '800p'
 
     pipeline = depthai.Pipeline()
     vio_pipeline = spectacularAI.depthai.Pipeline(pipeline, config)
 
-    RGB_OUTPUT_WIDTH = 300 # very small on purpose
+    RGB_OUTPUT_WIDTH = 600 # very small on purpose
     REF_ASPECT = 1920 / 1080.0
     w = RGB_OUTPUT_WIDTH
     h = int(round(w / REF_ASPECT))
@@ -115,40 +118,45 @@ if __name__ == '__main__':
 
                     # matrix
                     matrix = vio_out.pose.asMatrix()
+                    # if counter % 2 == 0:
+                    x, y, z = matrix[0, 3], matrix[1, 3], matrix[2, 3]
                     roll, pitch, yaw = homogenous_to_euler(matrix)
-                    x, y, yaw = apriltag_slam.fudge_factor(vio_out.pose.position.x, vio_out.pose.position.y, yaw)
+                    # x, y, yaw = apriltag_slam.fudge_factor(vio_out.pose.position.x, vio_out.pose.position.y, yaw)
                     sd.putNumber('vision_x', x)
                     sd.putNumber('vision_y', y)
+                    sd.putNumber('vision_z', z)
+                    sd.putNumber('vision_roll', roll)
                     sd.putNumber('vision_yaw', yaw)
+                    sd.putNumber('vision_pitch', pitch)
+                    sd.putBoolean('vision_active', True)
                     roll_deg, pitch_deg, yaw_deg = [np.rad2deg(roll), np.rad2deg(pitch), np.rad2deg(yaw)]
                     if counter % 2 == 0:
-                        cLogger.log_debug(f"(x, y, z, yaw (deg)): {(x, y, vio_out.pose.position.z, yaw_deg)}")
+                        cLogger.log_debug(f"(x, y, z, yaw (deg)): {(x, y, z, yaw_deg)}")
                     
-                elif rgbQueue.has(): # if we have a new rgb frame
+                elif SHOW_CAM and rgbQueue.has(): # if we have a new rgb frame
                     rgbFrame = rgbQueue.get()
 
-                    if SHOW_CAM: # debug viewer (so we know if apriltag in frame)
-                        cvFrame = rgbFrame.getCvFrame()
-                        if active and activated:
-                            cv2.putText(cvFrame, "Active", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
-                        elif not active and activated:
-                            cv2.putText(cvFrame, "No VIO", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
-                        elif not activated and not active:
-                            cv2.putText(cvFrame, "Not Active", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
-                        cv2.imshow("rgb", cvFrame)
-
-                        cv_key = cv2.waitKey(1)
-                        if cv_key == ord('q'):
-                            break
+                    cvFrame = rgbFrame.getCvFrame()
+                    if active and activated:
+                        cv2.putText(cvFrame, "Active", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
+                    elif not active and activated:
+                        cv2.putText(cvFrame, "No VIO", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
+                    elif not activated and not active:
+                        cv2.putText(cvFrame, "Not Active", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2)
+                    cv2.imshow("rgb", cvFrame)
+                    cv_key = cv2.waitKey(1)
+                    if cv_key == ord('q'):
+                        break
                 else: # if we have neither a new vio output nor a new rgb frame
                     active = False
-                    time.sleep(0.005) # need to sleep to not race condition
+                    sd.putBoolean('vision_active', False)
+                    time.sleep(0.005) # need to sleep to not spinlock
 
                 ### VIO ###
                 dt = time.perf_counter() - t1
                 timing_info.append(dt)
                 counter += 1
-                if counter % 1000 == 0:
+                if counter % 1000 == 0 and activated:
                     cLogger.log_info(f"Average speed (last 1000): {1/np.mean(timing_info)} Hz \n")
                     timing_info.clear()
 

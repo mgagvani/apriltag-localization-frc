@@ -26,8 +26,8 @@
 - [ ] Verify accuracy of localization with:
   - [x] No AprilTag
   - [x] One AprilTag
-  - [ ] Multiple AprilTags
+  - [x] Multiple AprilTags
 - [x] Convert data into format usable by FRC's Pose2d object (x, y, theta) from quaternions
 - [x] Use logging instead of prints
-- [ ] Stream data over NetworkTables
+- [x] Stream data over NetworkTables
 - [ ] Use streamed data in place of Pigeon/NavX/Dead Reckoning on the robot

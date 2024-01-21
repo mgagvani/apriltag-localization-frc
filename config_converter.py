@@ -94,6 +94,23 @@ def pose_to_matrix(pose_dict) -> np.ndarray:
 
     return matrix
 
+def convert_fmap(input_path):
+    with open(input_path, 'r') as f:
+        json_data = json.load(f)
+
+    output = {}
+    tag_data = json_data['fiducials']
+    for tag in tag_data:
+        id = tag['id']
+        size = tag['size'] / 1000 # convert to meters
+        raw_transform = tag['transform'] # array of 16 floats
+        matrix = np.array(raw_transform).reshape((4, 4))
+        print(id)
+        print_matrix(matrix); print()
+        output[id] = matrix
+
+    return output
+
 
 def convert_apriltag(input_path):
     # read JSON from file
@@ -112,6 +129,54 @@ def convert_apriltag(input_path):
         output[id] = matrix
     
     return output
+
+def viz_apriltags(output):
+    '''
+    Visualize the AprilTags in 3D space using Matplotlib
+
+    Parameters:
+    - output (dict): A dictionary containing the homogenous matrices
+    '''
+    import matplotlib.pyplot as plt
+    from mpl_toolkits.mplot3d import Axes3D
+    from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+
+    fig = plt.figure()
+    ax = fig.add_subplot(111, projection='3d')
+
+    VIEW_SIZE = 0.2 # meters
+    CORNERS = np.array([
+        [-VIEW_SIZE, -VIEW_SIZE, 0],
+        [-VIEW_SIZE, VIEW_SIZE, 0],
+        [VIEW_SIZE, VIEW_SIZE, 0],
+        [VIEW_SIZE, -VIEW_SIZE, 0]
+    ])
+
+    for id, matrix in output.items():
+        # draw square with correct orientation using Poly3DCollection
+        # get the corners
+        tag_corners = CORNERS @ matrix[:3, :3].T # rotate the corners
+        tag_corners += matrix[:3, 3] # translate the corners
+        
+        # draw the square
+        tag = Poly3DCollection([tag_corners], alpha=0.5, edgecolors='k')
+        # color based on id
+        tag._facecolors2d = tag._facecolor3d
+        tag._edgecolors2d = tag._edgecolor3d
+        tag.set(facecolors=plt.cm.tab10(int(id) % 10))
+        # label the square
+        ax.text(*tag_corners[0], id, fontsize=8)
+        ax.add_collection3d(tag)
+
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_zlabel('Z')
+    ax.set_xlim(-10, 10)
+    ax.set_ylim(-10, 10)
+    ax.set_zlim(0, 10)
+    ax.set_title('AprilTags')
+
+    plt.show()
 
 def export_to_json(output_path, output, family='tag36h11', size=0.152) -> None:
     '''
@@ -138,10 +203,18 @@ def export_to_json(output_path, output, family='tag36h11', size=0.152) -> None:
     with open(output_path, 'w') as f: # overwrite
         json.dump(output_list, f, indent=4)
 
-
-if __name__ == "__main__":
+def main_bunnybots():
     input_path = "apriltag_configs/bunnybots/Bunnybots_2023.json"
     output_path = "apriltag_configs/bunnybots/bunnybots_apriltags.json"
     converted_tag_poses = convert_apriltag(input_path)
     export_to_json(output_path, converted_tag_poses)
+
+def main_fmap():
+    input_path = "apriltag_configs/crescendo/unofficial_2024.fmap"
+    tag_poses = convert_fmap(input_path)
+    export_to_json("apriltag_configs/crescendo/crescendo_apriltags.json", tag_poses, family='tag36h11', size=0.1651)
+    viz_apriltags(tag_poses)
+
+if __name__ == "__main__":
+    main_fmap()
 
