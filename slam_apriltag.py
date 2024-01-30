@@ -13,13 +13,13 @@ from networktables import NetworkTables
 
 from utils import *
 
-SHOW_CAM = False
+SHOW_CAM = True
 if SHOW_CAM:
     import cv2
 
 PRINT_LOGS = True
 
-def make_pipelines(aprilTagPath="apriltag_configs/crescendo_apriltags.json"):
+def make_pipelines(aprilTagPath="apriltag_configs/crescendo/crescendo_apriltags.json"):
     # add apritag
     config = spectacularAI.depthai.Configuration()
     config.aprilTagPath = aprilTagPath
@@ -90,7 +90,7 @@ if __name__ == '__main__':
 
     cLogger = CustomLogger(debug_to_stdout=PRINT_LOGS)
 
-    NetworkTables.initialize(server='10.85.92.1')
+    NetworkTables.initialize(server='10.85.92.2')
     sd = NetworkTables.getTable('SmartDashboard')
 
     with depthai.Device(pipeline) as device, \
