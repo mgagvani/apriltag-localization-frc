@@ -73,11 +73,11 @@ def main():
     mono.out.link(monoOut.input)
 
     # IMU
-    imu = pipeline.create(depthai.node.IMU)
-    imu.enableIMUSensor([depthai.IMUSensor.ARVR_STABILIZED_ROTATION_VECTOR], 100)
-    imuOut = pipeline.create(depthai.node.XLinkOut)
-    imuOut.setStreamName("imu")
-    imu.out.link(imuOut.input)
+    # imu = pipeline.create(depthai.node.IMU)
+    # imu.enableIMUSensor([depthai.IMUSensor.ARVR_STABILIZED_ROTATION_VECTOR], 100)
+    # imuOut = pipeline.create(depthai.node.XLinkOut)
+    # imuOut.setStreamName("imu")
+    # imu.out.link(imuOut.input)
 
     # logger
     cLogger = CustomLogger(debug_to_stdout=PRINT_LOGS)
@@ -94,8 +94,8 @@ def main():
             timestamps.append(perf_counter())
 
             # get imu
-            imuData = imuQueue.get()
-            imuData = imuData.packets[0].rotationVector # TODO: this has .i, .j, .k, .real, convert to usable data
+            # imuData = imuQueue.get()
+            # imuData = imuData.packets[0].rotationVector # TODO: this has .i, .j, .k, .real, convert to usable data
             # print(imuData)
             # sd.putNumber("jetson_apriltag_imu_x", imuData.x)
             # sd.putNumber("jetson_apriltag_imu_y", imuData.y)
