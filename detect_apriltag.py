@@ -86,7 +86,7 @@ def main():
     with depthai.Device(pipeline) as device:
         # output queue
         q = device.getOutputQueue(name="mono", maxSize=4, blocking=False)
-        imuQueue = device.getOutputQueue(name="imu", maxSize=4, blocking=False)
+        # imuQueue = device.getOutputQueue(name="imu", maxSize=4, blocking=False)
         counter, timestamps = 0, []
 
         while True:
@@ -115,7 +115,7 @@ def main():
 
                 pose = pose_to_transform(poseR, pose_t)
                 x, y, z = pose[0, 3], pose[1, 3], pose[2, 3]
-                cLogger.log_debug(f"AprilTag x, y, z: ({x}, {y}, {z})")
+                cLogger.log_debug(f"AprilTag {detection.tag_id} x, y, z: ({x}, {y}, {z})")
                 sd.putNumber("jetson_apriltag_x", x)
                 sd.putNumber("jetson_apriltag_y", y)
                 sd.putNumber("jetson_apriltag_z", z)
