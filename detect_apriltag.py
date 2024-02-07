@@ -45,6 +45,8 @@ def get_camera_params():
         # intrinsics are 3x3 matrix
         intrinsics = calibData.getCameraIntrinsics(depthai.CameraBoardSocket.RIGHT)
         fx, fy, cx, cy = intrinsics[0][0], intrinsics[1][1], intrinsics[0][2], intrinsics[1][2]
+
+    device.close()
     return fx, fy, cx, cy
 
 def pose_to_transform(poseR, pose_t):

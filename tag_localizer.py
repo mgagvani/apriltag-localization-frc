@@ -26,9 +26,15 @@ def load_tag_config(filename: str) -> dict:
 
     return tags
 
-def get_camera_pose(detections: list, tags: dict) -> np.ndarray:
+def np_to_list(np_array: np.ndarray) -> list[list[float]]:
     """
-    Estimate the pose of the camera from the detected AprilTags
+    Convert a numpy array to a list of lists
+    """
+    return [list(row) for row in np_array]
+
+def get_global_pose(detections: list, tags: dict) -> np.ndarray:
+    """
+    Estimate the global field pose of the camera from the detected AprilTags
     Simple averaging of the poses of the detected tags
     
     Args:
@@ -43,8 +49,15 @@ def get_camera_pose(detections: list, tags: dict) -> np.ndarray:
     tag_poses = []
     for detection in detections:
         id, pose = detection
-        tagToWorld = tags[id]
-        tag_poses.append(tagToWorld @ pose) # transform the pose to the world frame
+        try:
+            tagToWorld = tags[id]
+            tag_poses.append(tagToWorld @ pose) # transform the pose to the world frame
+        except KeyError:
+            print(f"Tag {id} not found in tag config")
+            continue
+
+    if len(tag_poses) == 0:
+        return None
 
     # Separate rotation and translation components
     rotations = [pose[:3, :3] for pose in tag_poses]

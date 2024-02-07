@@ -12,6 +12,8 @@ import logging
 from networktables import NetworkTables
 
 from utils import *
+from detect_apriltag import *
+from tag_localizer import *
 
 SHOW_CAM = True
 if SHOW_CAM:
@@ -22,7 +24,7 @@ PRINT_LOGS = True
 def make_pipelines(aprilTagPath="apriltag_configs/crescendo/crescendo_apriltags.json"):
     # add apritag
     config = spectacularAI.depthai.Configuration()
-    config.aprilTagPath = aprilTagPath
+    # config.aprilTagPath = aprilTagPath
     config.useFeatureTracker = True
     config.useVioAutoExposure = True
     config.inputResolution = '800p'
@@ -30,14 +32,14 @@ def make_pipelines(aprilTagPath="apriltag_configs/crescendo/crescendo_apriltags.
     pipeline = depthai.Pipeline()
     vio_pipeline = spectacularAI.depthai.Pipeline(pipeline, config)
 
-    RGB_OUTPUT_WIDTH = 600 # very small on purpose
+    RGB_OUTPUT_WIDTH = 800 # very small on purpose
     REF_ASPECT = 1920 / 1080.0
     w = RGB_OUTPUT_WIDTH
     h = int(round(w / REF_ASPECT))
 
     camRgb = pipeline.createColorCamera()
     camRgb.setPreviewSize(w, h)
-    camRgb.setResolution(depthai.ColorCameraProperties.SensorResolution.THE_1080_P)
+    camRgb.setResolution(depthai.ColorCameraProperties.SensorResolution.THE_800_P)
     camRgb.setColorOrder(depthai.ColorCameraProperties.ColorOrder.BGR)
     camRgb.initialControl.setAutoFocusMode(depthai.RawCameraControl.AutoFocusMode.OFF)
     camRgb.initialControl.setManualFocus(0) # seems to be about 1m, not sure about the units
@@ -86,6 +88,7 @@ class ApriltagLocalizer:
         return x, (y - 0.04 * np.sin(yaw)), yaw
 
 if __name__ == '__main__':
+    # SLAM
     pipeline, vio_pipeline = make_pipelines()
 
     cLogger = CustomLogger(debug_to_stdout=PRINT_LOGS)
@@ -93,50 +96,99 @@ if __name__ == '__main__':
     NetworkTables.initialize(server='10.85.92.2')
     sd = NetworkTables.getTable('SmartDashboard')
 
+    # AprilTag injection
+    camera_params = get_camera_params()
+    detector = apriltag.Detector(
+        families="tag16h5",
+        nthreads=4,
+    )
+
+    tag_info = load_tag_config("apriltag_configs/test_apriltags.json")
+
+    # need to get a pose from apriltag to start the vio
+    cLogger.log_info("Waiting to see apriltag for first pose...")
+
     with depthai.Device(pipeline) as device, \
         vio_pipeline.startSession(device) as vio_session:
+    
+        rgbQueue = device.getOutputQueue(name="rgb", maxSize=4, blocking=False)
 
-        apriltag_slam = ApriltagLocalizer()
+        while True:
+            inFrame = rgbQueue.get()
+            frame = cv2.cvtColor(inFrame.getCvFrame(), cv2.COLOR_BGR2GRAY)
 
-        def main_loop():
-            rgbQueue = device.getOutputQueue(name="rgb", maxSize=4, blocking=False)
+            # detect apriltag
+            detections = detector.detect(frame, estimate_tag_pose=True, camera_params=camera_params, tag_size=0.1651)
 
-            timing_info = []
-            counter = 0
+            if len(detections) > 0:
+                camera_poses = []
+                for detection in detections:
+                    print(detection.tag_id)
+                    id = detection.tag_id
+                    camera_pose = pose_to_transform(detection.pose_R, detection.pose_t)
+                    camera_poses.append(camera_pose)
 
-            # will need this for NetworkTables to communicate if we are activated
-            activated = False # upon first vio output, set to True
-            active = False # if we were activated last loop, set to True
+                global_pose = get_global_pose([(id, pose) for id, pose in zip([detection.tag_id for detection in detections], camera_poses)], tag_info)
+                if global_pose is not None:
+                    cLogger.log_info(f"Acquired gobal pose: {global_pose}")
+                    break
 
-            while True:
-                t1 = time.perf_counter()
-                ### VIO ###
-                if vio_session.hasOutput(): # if we have a new vio output
-                    vio_out = vio_session.getOutput() # get it
-                    activated = True # we have a vio output, so we are activated
-                    active = True # we were activated last loop
+        # correct with the apriltag pose
+        sai_pose = spectacularAI.Pose.fromMatrix(time.time(), np_to_list(global_pose))
+        vio_session.addAbsolutePose(sai_pose, np_to_list(global_pose[:3, :3]), time.time())
 
-                    # matrix
-                    matrix = vio_out.pose.asMatrix()
-                    # if counter % 2 == 0:
-                    x, y, z = matrix[0, 3], matrix[1, 3], matrix[2, 3]
-                    roll, pitch, yaw = homogenous_to_euler(matrix)
-                    # x, y, yaw = apriltag_slam.fudge_factor(vio_out.pose.position.x, vio_out.pose.position.y, yaw)
-                    sd.putNumber('vision_x', x)
-                    sd.putNumber('vision_y', y)
-                    sd.putNumber('vision_z', z)
-                    sd.putNumber('vision_roll', roll)
-                    sd.putNumber('vision_yaw', yaw)
-                    sd.putNumber('vision_pitch', pitch)
-                    sd.putBoolean('vision_active', True)
-                    roll_deg, pitch_deg, yaw_deg = [np.rad2deg(roll), np.rad2deg(pitch), np.rad2deg(yaw)]
-                    if counter % 2 == 0:
-                        cLogger.log_debug(f"(x, y, z, yaw (deg)): {(x, y, z, yaw_deg)}")
+        cLogger.log_info("Starting VIO...")
+
+        timing_info = []
+        counter = 0
+
+        # will need this for NetworkTables to communicate if we are activated
+        activated = False # upon first vio output, set to True
+        active = False # if we were activated last loop, set to True
+
+        while True:
+            t1 = time.perf_counter()
+            ### VIO ###
+            if vio_session.hasOutput(): # if we have a new vio output
+                vio_out = vio_session.getOutput() # get it
+                activated = True # we have a vio output, so we are activated
+                active = True # we were activated last loop
+
+                # matrix
+                # matrix = vio_out.pose.asMatrix() # should be global pose now
+                matrix = global_pose if global_pose is not None else np.eye(4) # TODO: hacky, fix this
+                # if counter % 2 == 0:
+                x, y, z = matrix[0, 3], matrix[1, 3], matrix[2, 3]
+                roll, pitch, yaw = homogenous_to_euler(matrix)
+                # x, y, yaw = apriltag_slam.fudge_factor(vio_out.pose.position.x, vio_out.pose.position.y, yaw)
+                sd.putNumber('vision_x', x)
+                sd.putNumber('vision_y', y)
+                sd.putNumber('vision_z', z)
+                sd.putNumber('vision_roll', roll)
+                sd.putNumber('vision_yaw', yaw)
+                sd.putNumber('vision_pitch', pitch)
+                sd.putBoolean('vision_active', True)
+                roll_deg, pitch_deg, yaw_deg = [np.rad2deg(roll), np.rad2deg(pitch), np.rad2deg(yaw)]
+                if counter % 2 == 0:
+                    cLogger.log_debug(f"(x, y, z, yaw (deg)): {(x, y, z, yaw_deg)}")
                     
-                elif SHOW_CAM and rgbQueue.has(): # if we have a new rgb frame
-                    rgbFrame = rgbQueue.get()
+            elif rgbQueue.has(): # if we have a new rgb frame
+                rgbFrame = rgbQueue.get()
 
-                    cvFrame = rgbFrame.getCvFrame()
+                cvFrame = cv2.cvtColor(rgbFrame.getCvFrame(), cv2.COLOR_BGR2GRAY)
+
+                # once every few frames, update w/ apriltag again
+                if counter % 10 == 0:
+                    # detect apriltag (only ever 2)
+                    detections = detector.detect(cvFrame, estimate_tag_pose=True, camera_params=camera_params, tag_size=0.1651)[0:1]
+                    if len(detections) > 0:
+                        global_pose = get_global_pose([(id, pose_to_transform(detection.pose_R, detection.pose_t)) for detection in detections], tag_info)
+                        if global_pose is not None:
+                            sai_pose = spectacularAI.Pose.fromMatrix(time.time(), np_to_list(global_pose))
+                            vio_session.addAbsolutePose(spectacularAI.Pose.fromMatrix(time.time(), np_to_list(global_pose)), np_to_list(global_pose[:3, :3]), time.time())
+                            cLogger.log_info(f"Updated global pose w/ ID {detections[0].tag_id}")
+
+                if SHOW_CAM:
                     if active and activated:
                         cv2.putText(cvFrame, "Active", (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
                     elif not active and activated:
@@ -147,18 +199,15 @@ if __name__ == '__main__':
                     cv_key = cv2.waitKey(1)
                     if cv_key == ord('q'):
                         break
-                else: # if we have neither a new vio output nor a new rgb frame
-                    active = False
-                    sd.putBoolean('vision_active', False)
-                    time.sleep(0.005) # need to sleep to not spinlock
+            else: # if we have neither a new vio output nor a new rgb frame
+                active = False
+                sd.putBoolean('vision_active', False)
+                time.sleep(0.005) # need to sleep to not spinlock
 
-                ### VIO ###
-                dt = time.perf_counter() - t1
-                timing_info.append(dt)
-                counter += 1
-                if counter % 1000 == 0 and activated:
-                    cLogger.log_info(f"Average speed (last 1000): {1/np.mean(timing_info)} Hz \n")
-                    timing_info.clear()
-
-
-        apriltag_slam.start_in_parallel_with(main_loop)
+            ### VIO ###
+            dt = time.perf_counter() - t1
+            timing_info.append(dt)
+            counter += 1
+            if counter % 1000 == 0 and activated:
+                cLogger.log_info(f"Average speed (last 1000): {1/np.mean(timing_info)} Hz \n")
+                timing_info.clear()
