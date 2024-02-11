@@ -25,10 +25,11 @@ sd.putNumber("jetson_apriltag_yaw", 0)
 sd.putNumber("jetson_apriltag_id", 0)
 
 # todo figure out what imu data is returned
-sd.putNumber("jetson_apriltag_imu_x", 0)
-sd.putNumber("jetson_apriltag_imu_y", 0)
-sd.putNumber("jetson_apriltag_imu_z", 0)
+# sd.putNumber("jetson_apriltag_imu_x", 0)
+# sd.putNumber("jetson_apriltag_imu_y", 0)
+# sd.putNumber("jetson_apriltag_imu_z", 0)
 
+sd.putBoolean("jetson_tag_visible", False)
 sd.putBoolean("jetson_active", True)
 
 def exit_handler():
@@ -132,8 +133,11 @@ def main():
                 sd.putNumber("jetson_apriltag_yaw", yaw)
 
                 sd.putNumber("jetson_apriltag_id", detection.tag_id)
+                sd.putBoolean("jetson_tag_visible", True)
 
                 cLogger.log_debug(f"AprilTag {detection.tag_id} x, y, z: ({x}, {y}, {z}) r, p, y {np.rad2deg(roll)}, {np.rad2deg(pitch)}, {np.rad2deg(yaw)}")
+            else:
+                sd.putBoolean("jetson_tag_visible", False)
 
             # show frame
             # cv2.imshow("frame", frame)

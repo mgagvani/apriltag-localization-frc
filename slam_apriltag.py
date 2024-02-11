@@ -15,7 +15,7 @@ from utils import *
 from detect_apriltag import *
 from tag_localizer import *
 
-SHOW_CAM = True
+SHOW_CAM = False
 if SHOW_CAM:
     import cv2
 
@@ -96,14 +96,25 @@ if __name__ == '__main__':
     NetworkTables.initialize(server='10.85.92.2')
     sd = NetworkTables.getTable('SmartDashboard')
 
+    sd.putNumber('vision_x', 0)
+    sd.putNumber('vision_y', 0)
+    sd.putNumber('vision_z', 0)
+    sd.putNumber('vision_roll', 0)
+    sd.putNumber('vision_yaw', 0)
+    sd.putNumber('vision_pitch', 0)
+    sd.putBoolean('vision_active', True)
+
     # AprilTag injection
     camera_params = get_camera_params()
     detector = apriltag.Detector(
-        families="tag16h5",
+        families="tag36h11",
         nthreads=4,
     )
 
-    tag_info = load_tag_config("apriltag_configs/test_apriltags.json")
+    COV = 0.0001 # orientation covariance
+    POSITION_COV = np_to_list(COV * np.eye(3)) # position covariance
+
+    tag_info = load_tag_config("apriltag_configs/crescendo/crescendo_apriltags.json")
 
     # need to get a pose from apriltag to start the vio
     cLogger.log_info("Waiting to see apriltag for first pose...")
@@ -115,6 +126,7 @@ if __name__ == '__main__':
 
         while True:
             inFrame = rgbQueue.get()
+            apriltag_timestamp = inFrame.getTimestampDevice().total_seconds()
             frame = cv2.cvtColor(inFrame.getCvFrame(), cv2.COLOR_BGR2GRAY)
 
             # detect apriltag
@@ -134,8 +146,8 @@ if __name__ == '__main__':
                     break
 
         # correct with the apriltag pose
-        sai_pose = spectacularAI.Pose.fromMatrix(time.time(), np_to_list(global_pose))
-        vio_session.addAbsolutePose(sai_pose, np_to_list(global_pose[:3, :3]), time.time())
+        sai_pose = spectacularAI.Pose.fromMatrix(apriltag_timestamp, np_to_list(global_pose))
+        vio_session.addAbsolutePose(sai_pose, POSITION_COV, COV)
 
         cLogger.log_info("Starting VIO...")
 
@@ -155,8 +167,8 @@ if __name__ == '__main__':
                 active = True # we were activated last loop
 
                 # matrix
-                # matrix = vio_out.pose.asMatrix() # should be global pose now
-                matrix = global_pose if global_pose is not None else np.eye(4) # TODO: hacky, fix this
+                matrix = vio_out.pose.asMatrix() # should be global pose now
+                # matrix = global_pose if global_pose is not None else np.eye(4) # TODO: hacky, fix this
                 # if counter % 2 == 0:
                 x, y, z = matrix[0, 3], matrix[1, 3], matrix[2, 3]
                 roll, pitch, yaw = homogenous_to_euler(matrix)
@@ -174,6 +186,7 @@ if __name__ == '__main__':
                     
             elif rgbQueue.has(): # if we have a new rgb frame
                 rgbFrame = rgbQueue.get()
+                apriltag_timestamp = rgbFrame.getTimestampDevice().total_seconds()
 
                 cvFrame = cv2.cvtColor(rgbFrame.getCvFrame(), cv2.COLOR_BGR2GRAY)
 
@@ -184,9 +197,9 @@ if __name__ == '__main__':
                     if len(detections) > 0:
                         global_pose = get_global_pose([(id, pose_to_transform(detection.pose_R, detection.pose_t)) for detection in detections], tag_info)
                         if global_pose is not None:
-                            sai_pose = spectacularAI.Pose.fromMatrix(time.time(), np_to_list(global_pose))
-                            vio_session.addAbsolutePose(spectacularAI.Pose.fromMatrix(time.time(), np_to_list(global_pose)), np_to_list(global_pose[:3, :3]), time.time())
-                            cLogger.log_info(f"Updated global pose w/ ID {detections[0].tag_id}")
+                            sai_pose = spectacularAI.Pose.fromMatrix(apriltag_timestamp, np_to_list(global_pose))
+                            vio_session.addAbsolutePose(sai_pose, POSITION_COV, COV)
+                            cLogger.log_info(f"Global pose from Tag {detections[0].tag_id}: {global_pose[0][3]}, {global_pose[1][3]}, {global_pose[2][3]}")
 
                 if SHOW_CAM:
                     if active and activated:
