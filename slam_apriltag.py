@@ -114,7 +114,7 @@ if __name__ == '__main__':
     COV = 0.0001 # orientation covariance
     POSITION_COV = np_to_list(COV * np.eye(3)) # position covariance
 
-    tag_info = load_tag_config("apriltag_configs/crescendo/crescendo_apriltags.json")
+    tag_info = load_tag_config("apriltag_configs/crescendo/adjust_crescendo.json")
 
     # need to get a pose from apriltag to start the vio
     cLogger.log_info("Waiting to see apriltag for first pose...")
@@ -195,7 +195,11 @@ if __name__ == '__main__':
                     # detect apriltag (only ever 2)
                     detections = detector.detect(cvFrame, estimate_tag_pose=True, camera_params=camera_params, tag_size=0.1651)[0:1]
                     if len(detections) > 0:
+                        # matrix = pose_to_transform(detection.pose_R, detection.pose_t)
                         global_pose = get_global_pose([(id, pose_to_transform(detection.pose_R, detection.pose_t)) for detection in detections], tag_info)
+                        # print_matrix(matrix)
+                        # print_matrix(global_pose)
+                        input()
                         if global_pose is not None:
                             sai_pose = spectacularAI.Pose.fromMatrix(apriltag_timestamp, np_to_list(global_pose))
                             vio_session.addAbsolutePose(sai_pose, POSITION_COV, COV)
