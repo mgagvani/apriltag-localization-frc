@@ -24,12 +24,22 @@ sd.putNumber("jetson_apriltag_pitch", 0)
 sd.putNumber("jetson_apriltag_yaw", 0)
 sd.putNumber("jetson_apriltag_id", 0)
 
+# possible second apriltag
+sd.putNumber("jetson2_apriltag_x", 0)
+sd.putNumber("jetson2_apriltag_y", 0)
+sd.putNumber("jetson2_apriltag_z", 0)
+sd.putNumber("jetson2_apriltag_roll", 0)
+sd.putNumber("jetson2_apriltag_pitch", 0)
+sd.putNumber("jetson2_apriltag_yaw", 0)
+sd.putNumber("jetson2_apriltag_id", 0)
+
 # todo figure out what imu data is returned
 # sd.putNumber("jetson_apriltag_imu_x", 0)
 # sd.putNumber("jetson_apriltag_imu_y", 0)
 # sd.putNumber("jetson_apriltag_imu_z", 0)
 
 sd.putBoolean("jetson_tag_visible", False)
+sd.putBoolean("jetson2_tag_visible", False)
 sd.putBoolean("jetson_active", True)
 
 def exit_handler():
@@ -135,9 +145,33 @@ def main():
                 sd.putNumber("jetson_apriltag_id", detection.tag_id)
                 sd.putBoolean("jetson_tag_visible", True)
 
+                if len(detections) > 1:
+                    detection = detections[1]
+                    poseR = detection.pose_R
+                    pose_t = detection.pose_t
+
+                    pose = pose_to_transform(poseR, pose_t)
+                    x, y, z = pose[0, 3], pose[1, 3], pose[2, 3]
+                    
+                    sd.putNumber("jetson2_apriltag_x", x)
+                    sd.putNumber("jetson2_apriltag_y", y)
+                    sd.putNumber("jetson2_apriltag_z", z)
+
+                    roll, pitch, yaw = homogenous_to_euler(pose)
+                    # pitch is yaw relative to apriltag, roll/yaw here are irrelevant
+                    sd.putNumber("jetson2_apriltag_roll", roll)
+                    sd.putNumber("jetson2_apriltag_pitch", pitch)
+                    sd.putNumber("jetson2_apriltag_yaw", yaw)
+
+                    sd.putNumber("jetson2_apriltag_id", detection.tag_id)
+                    sd.putBoolean("jetson2_tag_visible", True)
+
+                    #
+
                 cLogger.log_debug(f"AprilTag {detection.tag_id} x, y, z: ({x}, {y}, {z}) r, p, y {np.rad2deg(roll)}, {np.rad2deg(pitch)}, {np.rad2deg(yaw)}")
             else:
                 sd.putBoolean("jetson_tag_visible", False)
+                sd.putBoolean("jetson2_tag_visible", False)
 
             # show frame
             # cv2.imshow("frame", frame)

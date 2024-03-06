@@ -45,12 +45,17 @@ def get_global_pose(detections: list, tags: dict) -> np.ndarray:
     - np.ndarray: A 4x4 homogenous matrix representing the pose of the camera in the world frame
     """
 
+    B = np.array([[0, 0, 1, 0],
+                  [1, 0, 0, 0],
+                  [0, -1, 0, 0],
+                  [0, 0, 0, 1]])
+
     # get the pose of each tag
     tag_poses = []
     for detection in detections:
         id, pose = detection
         try:
-            tagToWorld = tags[id]
+            tagToWorld = tags[id] @ B # apply correction matrix for coordinate system
             tag_poses.append(tagToWorld @ pose) # transform the pose to the world frame
         except KeyError:
             print(f"Tag {id} not found in tag config")

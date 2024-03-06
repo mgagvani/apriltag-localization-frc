@@ -181,8 +181,8 @@ if __name__ == '__main__':
                 sd.putNumber('vision_pitch', pitch)
                 sd.putBoolean('vision_active', True)
                 roll_deg, pitch_deg, yaw_deg = [np.rad2deg(roll), np.rad2deg(pitch), np.rad2deg(yaw)]
-                if counter % 2 == 0:
-                    cLogger.log_debug(f"(x, y, z, yaw (deg)): {(x, y, z, yaw_deg)}")
+                # if counter % 2 == 0:
+                    # cLogger.log_debug(f"(x, y, z, yaw (deg)): {(x, y, z, yaw_deg)}")
                     
             elif rgbQueue.has(): # if we have a new rgb frame
                 rgbFrame = rgbQueue.get()
@@ -195,15 +195,16 @@ if __name__ == '__main__':
                     # detect apriltag (only ever 2)
                     detections = detector.detect(cvFrame, estimate_tag_pose=True, camera_params=camera_params, tag_size=0.1651)[0:1]
                     if len(detections) > 0:
-                        # matrix = pose_to_transform(detection.pose_R, detection.pose_t)
+                        matrix = pose_to_transform(detection.pose_R, detection.pose_t)
                         global_pose = get_global_pose([(id, pose_to_transform(detection.pose_R, detection.pose_t)) for detection in detections], tag_info)
-                        # print_matrix(matrix)
-                        # print_matrix(global_pose)
-                        input()
+                        print_matrix(matrix)
+                        print_matrix(global_pose)
+                        print()
+                        # input()
                         if global_pose is not None:
                             sai_pose = spectacularAI.Pose.fromMatrix(apriltag_timestamp, np_to_list(global_pose))
                             vio_session.addAbsolutePose(sai_pose, POSITION_COV, COV)
-                            cLogger.log_info(f"Global pose from Tag {detections[0].tag_id}: {global_pose[0][3]}, {global_pose[1][3]}, {global_pose[2][3]}")
+                            # cLogger.log_info(f"Global pose from Tag {detections[0].tag_id}: {global_pose[0][3]}, {global_pose[1][3]}, {global_pose[2][3]}")
 
                 if SHOW_CAM:
                     if active and activated:
@@ -226,5 +227,5 @@ if __name__ == '__main__':
             timing_info.append(dt)
             counter += 1
             if counter % 1000 == 0 and activated:
-                cLogger.log_info(f"Average speed (last 1000): {1/np.mean(timing_info)} Hz \n")
+                # cLogger.log_info(f"Average speed (last 1000): {1/np.mean(timing_info)} Hz \n")
                 timing_info.clear()
