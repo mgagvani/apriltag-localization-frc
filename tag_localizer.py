@@ -5,10 +5,17 @@ Utility for detect_apriltag.py
 """
 
 import json
+import re
+# from detect_apriltag import pose_to_transform
 import numpy as np
 
-from detect_apriltag import pose_to_transform
+# from detect_apriltag import pose_to_transform
 from utils import print_matrix
+
+def pose_to_transform(poseR, pose_t):
+    rotationAndTranslation = np.concatenate((poseR, pose_t), 1)
+    return np.concatenate((rotationAndTranslation, np.array([[0, 0, 0 , 1]])), 0)
+    
 
 def load_tag_config(filename: str) -> dict:
     """
@@ -32,7 +39,7 @@ def np_to_list(np_array: np.ndarray) -> list[list[float]]:
     """
     return [list(row) for row in np_array]
 
-def get_global_pose(detections: list, tags: dict) -> np.ndarray:
+def get_global_pose(detections: list, tags: dict, use_closest=True) -> np.ndarray:
     """
     Estimate the global field pose of the camera from the detected AprilTags
     Simple averaging of the poses of the detected tags
@@ -40,6 +47,7 @@ def get_global_pose(detections: list, tags: dict) -> np.ndarray:
     Args:
     - detections (list): A list of AprilTag detections, each (id, pose) tuple
     - tags (dict): A dictionary of tag id to tagToWorld transform
+    - use_closest (bool): If True, use the closest tag to estimate the camera pose, otherwise use all tags
 
     Returns:
     - np.ndarray: A 4x4 homogenous matrix representing the pose of the camera in the world frame
@@ -53,7 +61,13 @@ def get_global_pose(detections: list, tags: dict) -> np.ndarray:
     # get the pose of each tag
     tag_poses = []
     for detection in detections:
-        id, pose = detection
+        # id, pose = detection
+        id = detection.tag_id
+        poseR = detection.pose_R
+        poseT = detection.pose_t
+
+        pose = pose_to_transform(poseR, poseT)
+
         try:
             tagToWorld = tags[id] @ B # apply correction matrix for coordinate system
             tag_poses.append(tagToWorld @ pose) # transform the pose to the world frame
@@ -63,6 +77,12 @@ def get_global_pose(detections: list, tags: dict) -> np.ndarray:
 
     if len(tag_poses) == 0:
         return None
+    
+    if use_closest:
+        # Use the pose of the closest tag
+        tag_poses = sorted(tag_poses, key=lambda pose: np.linalg.norm(pose[:3, 3]))
+        camera_pose = tag_poses[0]
+        return camera_pose
 
     # Separate rotation and translation components
     rotations = [pose[:3, :3] for pose in tag_poses]

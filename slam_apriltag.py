@@ -104,6 +104,23 @@ if __name__ == '__main__':
     sd.putNumber('vision_pitch', 0)
     sd.putBoolean('vision_active', True)
 
+    sd.putNumber("jetson_apriltag_x", 0)
+    sd.putNumber("jetson_apriltag_y", 0)
+    sd.putNumber("jetson_apriltag_z", 0)
+    sd.putNumber("jetson_apriltag_roll", 0)
+    sd.putNumber("jetson_apriltag_pitch", 0)
+    sd.putNumber("jetson_apriltag_yaw", 0)
+    sd.putNumber("jetson_apriltag_id", 0)
+
+    # possible second apriltag
+    sd.putNumber("jetson2_apriltag_x", 0)
+    sd.putNumber("jetson2_apriltag_y", 0)
+    sd.putNumber("jetson2_apriltag_z", 0)
+    sd.putNumber("jetson2_apriltag_roll", 0)
+    sd.putNumber("jetson2_apriltag_pitch", 0)
+    sd.putNumber("jetson2_apriltag_yaw", 0)
+    sd.putNumber("jetson2_apriltag_id", 0)
+
     # AprilTag injection
     camera_params = get_camera_params()
     detector = apriltag.Detector(
@@ -191,15 +208,17 @@ if __name__ == '__main__':
                 cvFrame = cv2.cvtColor(rgbFrame.getCvFrame(), cv2.COLOR_BGR2GRAY)
 
                 # once every few frames, update w/ apriltag again
-                if counter % 10 == 0:
+                if counter % 2 == 0:
                     # detect apriltag (only ever 2)
                     detections = detector.detect(cvFrame, estimate_tag_pose=True, camera_params=camera_params, tag_size=0.1651)[0:1]
+                    post_to_nt(sd, detections)
                     if len(detections) > 0:
                         matrix = pose_to_transform(detection.pose_R, detection.pose_t)
                         global_pose = get_global_pose([(id, pose_to_transform(detection.pose_R, detection.pose_t)) for detection in detections], tag_info)
-                        print_matrix(matrix)
-                        print_matrix(global_pose)
-                        print()
+                        # print_matrix(matrix)
+                        # if counter % 7 == 0:
+                        #     print_matrix(global_pose)
+                        # print()
                         # input()
                         if global_pose is not None:
                             sai_pose = spectacularAI.Pose.fromMatrix(apriltag_timestamp, np_to_list(global_pose))

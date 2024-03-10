@@ -8,6 +8,7 @@ import pupil_apriltags as apriltag
 import depthai
 import atexit
 from time import perf_counter
+from tag_localizer import get_global_pose, load_tag_config
 from utils import *
 
 from networktables import NetworkTables
@@ -33,6 +34,10 @@ sd.putNumber("jetson2_apriltag_pitch", 0)
 sd.putNumber("jetson2_apriltag_yaw", 0)
 sd.putNumber("jetson2_apriltag_id", 0)
 
+sd.putNumber("vision_x", 0)
+sd.putNumber("vision_y", 0)
+sd.putNumber("vision_z", 0)
+
 # todo figure out what imu data is returned
 # sd.putNumber("jetson_apriltag_imu_x", 0)
 # sd.putNumber("jetson_apriltag_imu_y", 0)
@@ -46,6 +51,59 @@ def exit_handler():
     sd.putBoolean("jetson_active", False)
 
 atexit.register(exit_handler)
+
+def post_to_nt(sd, detections, tag_config=None):
+    """
+    Post the detections to NetworkTables
+    
+    Args:
+    - sd (NetworkTables): The NetworkTables instance
+    - detections (list): A list of AprilTag detections
+    """
+    detections = detections[:2] # only post the first two detections
+
+    # post to jetson_apriltag_*, jetson2_apriltag_*
+
+    for i, detection in enumerate(detections):
+        poseR = detection.pose_R
+        pose_t = detection.pose_t
+        pose = pose_to_transform(poseR, pose_t)
+        id = int(detection.tag_id)
+
+        global_pose = get_global_pose(detections, tag_config)
+        if global_pose is not None:
+            gx, gy, gz = global_pose[0, 3], global_pose[1, 3], global_pose[2, 3]
+            sd.putNumber("vision_x", gx)
+            sd.putNumber("vision_y", gy)
+            sd.putNumber("vision_z", gz)
+
+        x, y, z = pose[0, 3], pose[1, 3], pose[2, 3]
+        roll, pitch, yaw = homogenous_to_euler(pose)
+
+        sd.putNumber(f"jetson_apriltag_x", x)
+        sd.putNumber(f"jetson_apriltag_y", y)
+        sd.putNumber(f"jetson_apriltag_z", z)
+        sd.putNumber(f"jetson_apriltag_roll", roll)
+        sd.putNumber(f"jetson_apriltag_pitch", pitch)
+        sd.putNumber(f"jetson_apriltag_yaw", yaw)
+        sd.putNumber(f"jetson_apriltag_id", id)
+        sd.putBoolean(f"jetson_tag_visible", True)
+
+        if i == 1:
+            sd.putNumber(f"jetson2_apriltag_x", x)
+            sd.putNumber(f"jetson2_apriltag_y", y)
+            sd.putNumber(f"jetson2_apriltag_z", z)
+            sd.putNumber(f"jetson2_apriltag_roll", roll)
+            sd.putNumber(f"jetson2_apriltag_pitch", pitch)
+            sd.putNumber(f"jetson2_apriltag_yaw", yaw)
+            sd.putNumber(f"jetson2_apriltag_id", id)
+            sd.putBoolean(f"jetson2_tag_visible", True)
+
+    if len(detections) < 2:
+        sd.putBoolean("jetson2_tag_visible", False)
+    
+    if len(detections) < 1:
+        sd.putBoolean("jetson_tag_visible", False)
 
 def get_camera_params():
     """
@@ -98,6 +156,8 @@ def main():
     # logger
     cLogger = CustomLogger(debug_to_stdout=PRINT_LOGS)
 
+    tag_config = load_tag_config("apriltag_configs/crescendo/adjust_crescendo.json")
+
     # loop
     with depthai.Device(pipeline) as device:
         # output queue
@@ -130,45 +190,17 @@ def main():
                 pose_t = detection.pose_t
 
                 pose = pose_to_transform(poseR, pose_t)
-                x, y, z = pose[0, 3], pose[1, 3], pose[2, 3]
+
+                global_pose = get_global_pose(detections, tag_config, True)
+
+                # if counter % 10 == 0:
+                #     print_matrix(f"{detection.tag_id} : {pose[3, 2]}")
+                #     print_matrix(global_pose)
                 
-                sd.putNumber("jetson_apriltag_x", x)
-                sd.putNumber("jetson_apriltag_y", y)
-                sd.putNumber("jetson_apriltag_z", z)
+                # post to NetworkTables
+                post_to_nt(sd, detections, tag_config)
 
-                roll, pitch, yaw = homogenous_to_euler(pose)
-                # pitch is yaw relative to apriltag, roll/yaw here are irrelevant
-                sd.putNumber("jetson_apriltag_roll", roll)
-                sd.putNumber("jetson_apriltag_pitch", pitch)
-                sd.putNumber("jetson_apriltag_yaw", yaw)
-
-                sd.putNumber("jetson_apriltag_id", detection.tag_id)
-                sd.putBoolean("jetson_tag_visible", True)
-
-                if len(detections) > 1:
-                    detection = detections[1]
-                    poseR = detection.pose_R
-                    pose_t = detection.pose_t
-
-                    pose = pose_to_transform(poseR, pose_t)
-                    x, y, z = pose[0, 3], pose[1, 3], pose[2, 3]
-                    
-                    sd.putNumber("jetson2_apriltag_x", x)
-                    sd.putNumber("jetson2_apriltag_y", y)
-                    sd.putNumber("jetson2_apriltag_z", z)
-
-                    roll, pitch, yaw = homogenous_to_euler(pose)
-                    # pitch is yaw relative to apriltag, roll/yaw here are irrelevant
-                    sd.putNumber("jetson2_apriltag_roll", roll)
-                    sd.putNumber("jetson2_apriltag_pitch", pitch)
-                    sd.putNumber("jetson2_apriltag_yaw", yaw)
-
-                    sd.putNumber("jetson2_apriltag_id", detection.tag_id)
-                    sd.putBoolean("jetson2_tag_visible", True)
-
-                    #
-
-                cLogger.log_debug(f"AprilTag {detection.tag_id} x, y, z: ({x}, {y}, {z}) r, p, y {np.rad2deg(roll)}, {np.rad2deg(pitch)}, {np.rad2deg(yaw)}")
+                # cLogger.log_debug(f"AprilTag {detection.tag_id} x, y, z: ({x}, {y}, {z}) r, p, y {np.rad2deg(roll)}, {np.rad2deg(pitch)}, {np.rad2deg(yaw)}")
             else:
                 sd.putBoolean("jetson_tag_visible", False)
                 sd.putBoolean("jetson2_tag_visible", False)
