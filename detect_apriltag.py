@@ -37,6 +37,9 @@ sd.putNumber("jetson2_apriltag_id", 0)
 sd.putNumber("vision_x", 0)
 sd.putNumber("vision_y", 0)
 sd.putNumber("vision_z", 0)
+sd.putNumber("vision_roll", 0)
+sd.putNumber("vision_pitch", 0)
+sd.putNumber("vision_yaw", 0)
 
 # todo figure out what imu data is returned
 # sd.putNumber("jetson_apriltag_imu_x", 0)
@@ -73,21 +76,25 @@ def post_to_nt(sd, detections, tag_config=None):
         global_pose = get_global_pose(detections, tag_config)
         if global_pose is not None:
             gx, gy, gz = global_pose[0, 3], global_pose[1, 3], global_pose[2, 3]
+            groll, gpitch, gyaw = homogenous_to_euler(global_pose)
             sd.putNumber("vision_x", gx)
             sd.putNumber("vision_y", gy)
             sd.putNumber("vision_z", gz)
+            sd.putNumber("vision_roll", groll)
+            sd.putNumber("vision_pitch", gpitch)
+            sd.putNumber("vision_yaw", gyaw)
 
         x, y, z = pose[0, 3], pose[1, 3], pose[2, 3]
         roll, pitch, yaw = homogenous_to_euler(pose)
-
-        sd.putNumber(f"jetson_apriltag_x", x)
-        sd.putNumber(f"jetson_apriltag_y", y)
-        sd.putNumber(f"jetson_apriltag_z", z)
-        sd.putNumber(f"jetson_apriltag_roll", roll)
-        sd.putNumber(f"jetson_apriltag_pitch", pitch)
-        sd.putNumber(f"jetson_apriltag_yaw", yaw)
-        sd.putNumber(f"jetson_apriltag_id", id)
-        sd.putBoolean(f"jetson_tag_visible", True)
+        if i == 0:
+            sd.putNumber(f"jetson_apriltag_x", x)
+            sd.putNumber(f"jetson_apriltag_y", y)
+            sd.putNumber(f"jetson_apriltag_z", z)
+            sd.putNumber(f"jetson_apriltag_roll", roll)
+            sd.putNumber(f"jetson_apriltag_pitch", pitch)
+            sd.putNumber(f"jetson_apriltag_yaw", yaw)
+            sd.putNumber(f"jetson_apriltag_id", id)
+            sd.putBoolean(f"jetson_tag_visible", True)
 
         if i == 1:
             sd.putNumber(f"jetson2_apriltag_x", x)
@@ -131,7 +138,7 @@ def main():
     camera_params = get_camera_params()
     detector = apriltag.Detector(
         families="tag36h11",
-        nthreads=4,
+        nthreads=8,
     )
 
     # get mono camera
