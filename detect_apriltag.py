@@ -139,14 +139,18 @@ def main():
     detector = apriltag.Detector(
         families="tag36h11",
         nthreads=8,
+        debug=False
     )
 
     # get mono camera
     pipeline = depthai.Pipeline()
+    controlIn = pipeline.create(depthai.node.XLinkIn)
+    controlIn.setStreamName('control')
     mono = pipeline.create(depthai.node.MonoCamera)
     mono.setCamera("right")
     mono.setResolution(depthai.MonoCameraProperties.SensorResolution.THE_800_P)
     mono.setFps(120)
+    controlIn.out.link(mono.inputControl)
 
     # create output queue for mono camera
     monoOut = pipeline.create(depthai.node.XLinkOut)
@@ -169,8 +173,16 @@ def main():
     with depthai.Device(pipeline) as device:
         # output queue
         q = device.getOutputQueue(name="mono", maxSize=4, blocking=False)
+        controlQueue = device.getInputQueue(controlIn.getStreamName())
         # imuQueue = device.getOutputQueue(name="imu", maxSize=4, blocking=False)
         counter, timestamps = 0, []
+
+        # set exposure
+        ctrl = depthai.CameraControl()
+        ctrl.setManualExposure(2000, 400) # exp us, ISO
+        # ctrl.setAutoExposureEnable()
+        controlQueue.send(ctrl)
+        
 
         while True:
             counter += 1
@@ -186,6 +198,9 @@ def main():
 
             inFrame = q.get()
             frame = inFrame.getCvFrame()
+            # save
+            if counter % 10 == 0:
+                cv2.imwrite(f"debug_pics/debug{counter:05d}.jpg", frame)
             # gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
             # detect apriltag
