@@ -199,7 +199,7 @@ def main():
             inFrame = q.get()
             frame = inFrame.getCvFrame()
             # save
-            if counter % 10 == 0:
+            if counter % 1000 == 0:
                 cv2.imwrite(f"debug_pics/debug{counter:05d}.jpg", frame)
             # gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
